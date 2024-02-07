@@ -3,18 +3,17 @@ package com.makipa.celytra;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Material;
 import org.bukkit.Location;
-import org.bukkit.block.BlockFace;
 import org.bukkit.entity.Player;
+import org.bukkit.event.player.PlayerTeleportEvent;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
+import org.bukkit.event.entity.EntityToggleGlideEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
-import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.player.PlayerRespawnEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import static org.apache.logging.log4j.LogManager.getLogger;
-
 
 import java.io.IOException;
 import java.util.HashMap;
@@ -33,58 +32,41 @@ public class PlayerEventListener implements Listener {
     @EventHandler
     public void onPlayerJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
-        UUID playerId = player.getUniqueId();
-
-        if (plugin.getDataConfig().contains(playerId.toString())) {
-            ItemStack savedChestplate = plugin.getDataConfig().getItemStack(playerId.toString());
-            originalChestplates.put(playerId, savedChestplate);
-        }
-
-        ItemStack currentChestplate = player.getInventory().getChestplate();
-        if (currentChestplate == null || currentChestplate.getType() == Material.AIR) {
-            ItemStack elytra = new ItemStack(Material.ELYTRA);
-            ItemMeta meta = elytra.getItemMeta();
-            meta.displayName(Component.text("Spawn-Elytra"));
-            elytra.setItemMeta(meta);
-            player.getInventory().setChestplate(elytra);
-        } else {
-            originalChestplates.put(playerId, currentChestplate);
-        }
-    }
-
-    @EventHandler
-    public void onPlayerMove(PlayerMoveEvent event) {
-        Player player = event.getPlayer();
-        Location playerLocation = player.getLocation();
-        Location worldSpawn = player.getWorld().getSpawnLocation();
-
-        if (playerLocation.distance(worldSpawn) > 50 && (!player.isGliding() || player.getLocation().getBlock().getRelative(BlockFace.DOWN).isLiquid())) {
-            getLogger().info(player.getName() + " hat einen Elytra-Flug beendet");
-            ItemStack chestplate = player.getInventory().getChestplate();
-            if (chestplate != null && chestplate.hasItemMeta()) {
-                ItemMeta meta = chestplate.getItemMeta();
-                Optional<Component> displayName = Optional.ofNullable(meta.displayName());
-
-                if (displayName.isPresent() && displayName.get().toString().contains("Spawn-Elytra")) {
-                    player.getInventory().setChestplate(null);
-
-                    if (originalChestplates.containsKey(player.getUniqueId())) {
-                        player.getInventory().setChestplate(originalChestplates.get(player.getUniqueId()));
-                        originalChestplates.remove(player.getUniqueId());
-                    }
-                }
-            }
-        }
+        giveElytra(player);
     }
 
     @EventHandler
     public void onPlayerRespawn(PlayerRespawnEvent event) {
         Player player = event.getPlayer();
-        ItemStack elytra = new ItemStack(Material.ELYTRA);
-        ItemMeta meta = elytra.getItemMeta();
-        meta.displayName(Component.text("Spawn-Elytra"));
-        elytra.setItemMeta(meta);
-        player.getInventory().setChestplate(elytra);
+        giveElytra(player);
+    }
+
+    @EventHandler
+    public void onEntityToggleGlide(EntityToggleGlideEvent event) {
+        if (!(event.getEntity() instanceof Player)) return;
+        Player player = (Player) event.getEntity();
+        UUID playerId = player.getUniqueId();
+
+        Location playerLocation = player.getLocation();
+        Location worldSpawn = player.getWorld().getSpawnLocation();
+        Material blockType = playerLocation.getBlock().getType();
+        boolean isOverWaterOrLava = blockType == Material.WATER || blockType == Material.LAVA;
+        getLogger().info("onEntityToggleGlide triggered");
+
+            ItemStack chestplate = player.getInventory().getChestplate();
+            if (chestplate != null && chestplate.hasItemMeta()) {
+                ItemMeta meta = chestplate.getItemMeta();
+                Optional<Component> displayName = Optional.ofNullable(meta.displayName());
+
+                if (displayName.isPresent() && Component.text("Spawn-Elytra").equals(displayName.get())) {
+                    getLogger().info("hat Spawn-Elytra");
+                    player.getInventory().setChestplate(null);
+                    if (playerLocation.distance(worldSpawn) > 50 && (!event.isGliding() || isOverWaterOrLava)) {
+                        getLogger().info("distance > 50, !isGliding oder Wasser/Lava");
+                        removeElytra(player);
+                    }
+                }
+            }
     }
 
     @EventHandler
@@ -102,6 +84,58 @@ public class PlayerEventListener implements Listener {
             } catch (IOException e) {
                 e.printStackTrace();
             }
+        }
+    }
+
+    private void giveElytra(Player player) {
+        UUID playerId = player.getUniqueId();
+        ItemStack currentChestplate = player.getInventory().getChestplate();
+
+        if (currentChestplate != null && currentChestplate.getType() != Material.AIR) {
+            originalChestplates.put(playerId, currentChestplate.clone());
+            player.getInventory().setChestplate(null);
+        }
+
+        ItemStack elytra = new ItemStack(Material.ELYTRA);
+        ItemMeta meta = elytra.getItemMeta();
+        meta.displayName(Component.text("Spawn-Elytra"));
+        elytra.setItemMeta(meta);
+        player.getInventory().setChestplate(elytra);
+    }
+
+    private void removeElytra(Player player) {
+        getLogger().info("removeElytra triggered");
+        UUID playerId = player.getUniqueId();
+        ItemStack chestplate = player.getInventory().getChestplate();
+
+        if (chestplate != null && chestplate.hasItemMeta()) {
+            ItemMeta meta = chestplate.getItemMeta();
+            Optional<Component> displayName = Optional.ofNullable(meta.displayName());
+
+            if (displayName.isPresent() && Component.text("Spawn-Elytra").equals(displayName.get())) {
+                player.getInventory().setChestplate(null);
+
+                if (originalChestplates.containsKey(playerId)) {
+                    player.getInventory().setChestplate(originalChestplates.get(playerId));
+                    originalChestplates.remove(playerId);
+                }
+            }
+        }
+    }
+
+    @EventHandler
+    public void onPlayerTeleport(PlayerTeleportEvent event) {
+        Player player = event.getPlayer();
+        removeElytraIfConditionsMet(player);
+    }
+
+    private void removeElytraIfConditionsMet(Player player) {
+        UUID playerId = player.getUniqueId();
+        Location playerLocation = player.getLocation();
+        Location worldSpawn = player.getWorld().getSpawnLocation();
+
+        if (playerLocation.distance(worldSpawn) > 50) {
+            removeElytra(player);
         }
     }
 }

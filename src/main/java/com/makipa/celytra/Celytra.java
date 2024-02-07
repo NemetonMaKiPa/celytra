@@ -1,12 +1,12 @@
 package com.makipa.celytra;
 
-import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.configuration.file.YamlConfiguration;
+import org.bukkit.plugin.java.JavaPlugin;
+
 import java.io.File;
 import java.io.IOException;
 
 public final class Celytra extends JavaPlugin {
-
     private File dataFile;
     private YamlConfiguration dataConfig;
 
