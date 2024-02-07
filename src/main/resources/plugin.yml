@@ -1,0 +1,4 @@
+name: celytra
+version: '${project.version}'
+main: com.makipa.celytra.Celytra
+api-version: '1.20'
